@@ -4,6 +4,7 @@ import os
 import string
 import math
 import numpy as np
+import pymeshlab as ml
 
 NONE_STATEMENT = 0
 JOIN_STATEMENT = 1
@@ -117,6 +118,8 @@ def getmatrix():
             start = True
 
     mfp.close()
+    #~ print(matrix)
+
     strmat = '<inertia ixx="'+str(matrix[0][0])+'" '
     strmat = strmat + 'ixy = "'+str(matrix[0][1])+'" '
     strmat = strmat + 'ixz = "'+str(matrix[0][2])+'" '
@@ -239,15 +242,26 @@ with open(filepath) as fp:
                 f.close()
 
                 os.system("openscad "+filename_scad+" -o "+filename_stl)
-                os.system("meshlabserver -i "+filename_stl+" -o "+filename_stlout)
-                os.system("meshlabserver -i "+filename_stl+" -s topo.mlx -l matrix.txt > /dev/null 2>&1")
 
-                os.system("rm "+filename_stl)
-                os.system("rm "+filename_scad)
+                ms = ml.MeshSet()
+                ms.load_new_mesh(filename_stl)
+                # a 4x4 numpy-like matrix
+                matrix = ms.current_mesh().transform_matrix()
+                # Save to matrix.txt (replicating the meshlabserver -l behavior)
+                np.savetxt('matrix.txt', matrix, delimiter=' ')
+
+                print("Transformation matrix saved to matrix.txt")
+
+                #~ os.system("meshlabserver -i "+filename_stl+" -o "+filename_stlout)
+                #~ os.system("meshlabserver -i "+filename_stl+" -s topo.mlx -l matrix.txt > /dev/null 2>&1")
+
+                #~ os.system("rm "+filename_stl)
+                #~ os.system("rm "+filename_scad)
 
                 # write urdf with stl file
-                write_link(linkname, trans,rgb,filename_stlout)
-                os.system("rm matrix.txt")
+                # TODO this reads matrix.txt, which is silly: we have the matrix in memory already
+                write_link(linkname, trans,rgb,filename_stl) #filename_stlout)
+                #~ os.system("rm matrix.txt")
 
                 outline = ""
         p=s
