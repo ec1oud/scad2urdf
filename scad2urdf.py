@@ -99,10 +99,10 @@ def write_join(joins, jtrans=[0, 0, 0], jrota=[0, 0, 0]):
     wf.write("\n")
 
 
-def getmatrix(matrix_data):
+def getmatrix(matrix):
     """Extract inertia tensor and center of mass from 4x4 transformation matrix.
 
-    The matrix_data is a 4x4 numpy array where:
+    The matrix is a 4x4 numpy array where:
     - Rows 0-2, Cols 0-2 contain rotation
     - Rows 0-2, Col 3 contains translation (center of mass offset)
     - For inertia, we need to compute from mesh properties
@@ -110,15 +110,15 @@ def getmatrix(matrix_data):
     Since we don't have actual inertia data from the transformation matrix,
     we return a default inertia and use the translation as COM offset.
     """
-    # matrix_data is the 4x4 transformation matrix from MeshLab
-    if len(matrix_data) < 4 or len(matrix_data[0]) < 4:
+    # matrix is the 4x4 transformation matrix from MeshLab
+    if len(matrix) < 4 or len(matrix[0]) < 4:
         # Fallback if matrix is malformed
         com = '"<origin rpy="0 0 0" xyz="0 0 0"/>\n'
         strmat = '<inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />\n'
         return strmat, com
 
     # Extract center of mass from translation column (first 3 elements of 4th column)
-    com_xyz = [str(matrix_data[i][3]) for i in range(3)]
+    com_xyz = [str(matrix[i][3]) for i in range(3)]
     com = '"<origin rpy="0 0 0" xyz="' + " ".join(com_xyz) + '"/>\n'
 
     # Since transformation matrix doesn't contain inertia data,
@@ -129,7 +129,7 @@ def getmatrix(matrix_data):
     return strmat, com
 
 
-def write_link(linkname, trans, rgb, filename_stl):
+def write_link(linkname, trans, rgb, filename_stl, matrix):
     ftrans = [float(i) for i in trans]
     link_db[linkname] = ftrans
 
@@ -262,21 +262,12 @@ with open(filepath) as fp:
                 ms.load_new_mesh(filename_stl)
                 # a 4x4 numpy-like matrix
                 matrix = ms.current_mesh().transform_matrix()
-                # Save to matrix.txt (replicating the meshlabserver -l behavior)
-                np.savetxt("matrix.txt", matrix, delimiter=" ")
 
-                print("Transformation matrix saved to matrix.txt")
-
-                # os.system("meshlabserver -i "+filename_stl+" -o "+filename_stlout)
-                # os.system("meshlabserver -i "+filename_stl+" -s topo.mlx -l matrix.txt > /dev/null 2>&1")
-
-                # os.system("rm "+filename_stl)
-                # os.system("rm "+filename_scad)
+                os.system("rm " + filename_stl)
+                os.system("rm " + filename_scad)
 
                 # write urdf with stl file
-                # TODO this reads matrix.txt, which is silly: we have the matrix in memory already
-                write_link(linkname, trans, rgb, filename_stl)  # filename_stlout)
-                # os.system("rm matrix.txt")
+                write_link(linkname, trans, rgb, filename_stl, matrix) # filename_stlout
 
                 outline = ""
         p = s
