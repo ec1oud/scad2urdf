@@ -99,37 +99,45 @@ def write_join(joins, jtrans=[0, 0, 0], jrota=[0, 0, 0]):
     wf.write("\n")
 
 
-def getmatrix(matrix):
-    """Extract inertia tensor and center of mass from 4x4 transformation matrix.
+def get_inertial_data(mesh, measures):
+    """Extract inertia tensor and center of mass from mesh and geometric measures.
 
-    The matrix is a 4x4 numpy array where:
-    - Rows 0-2, Cols 0-2 contain rotation
-    - Rows 0-2, Col 3 contains translation (center of mass offset)
-    - For inertia, we need to compute from mesh properties
+    Args:
+        mesh: The mesh object from pymeshlab
+        measures: Geometric measures dictionary from compute_geometric_measures()
 
-    Since we don't have actual inertia data from the transformation matrix,
-    we return a default inertia and use the translation as COM offset.
+    Returns:
+        tuple: (inertia_xml, com_xml) where:
+            - inertia_xml: The <inertia> tag with inertia tensor values
+            - com_xml: The <origin> tag with center of mass position
     """
-    # matrix is the 4x4 transformation matrix from MeshLab
-    if len(matrix) < 4 or len(matrix[0]) < 4:
-        # Fallback if matrix is malformed
-        com = '"<origin rpy="0 0 0" xyz="0 0 0"/>\n'
-        strmat = '<inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />\n'
-        return strmat, com
+    # Get center of mass from measures
+    com = measures['center_of_mass']
+    com_xyz = [str(float(com[i])) for i in range(3)]
+    com_xml = '<origin rpy="0 0 0" xyz="' + " ".join(com_xyz) + '"/>\n'
 
-    # Extract center of mass from translation column (first 3 elements of 4th column)
-    com_xyz = [str(matrix[i][3]) for i in range(3)]
-    com = '"<origin rpy="0 0 0" xyz="' + " ".join(com_xyz) + '"/>\n'
+    # Get inertia tensor from measures
+    inertia = measures['inertia_tensor']
+    ixx = float(inertia[0][0])
+    ixy = float(inertia[0][1])
+    ixz = float(inertia[0][2])
+    iyy = float(inertia[1][1])
+    iyz = float(inertia[1][2])
+    izz = float(inertia[2][2])
 
-    # Since transformation matrix doesn't contain inertia data,
-    # we need to compute inertia separately or use defaults
-    # For now, return default inertia values
-    strmat = '<inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />\n'
+    # Format inertia values to reasonable precision
+    def fmt(val):
+        return f"{val:.6f}".rstrip('0').rstrip('.')
 
-    return strmat, com
+    inertia_xml = (
+        f'<inertia ixx="{fmt(ixx)}" ixy="{fmt(ixy)}" ixz="{fmt(ixz)}" '
+        f'iyy="{fmt(iyy)}" iyz="{fmt(iyz)}" izz="{fmt(izz)}" />\n'
+    )
+
+    return inertia_xml, com_xml
 
 
-def write_link(linkname, trans, rgb, filename_stl, matrix):
+def write_link(linkname, trans, rgb, filename_stl, measures):
     ftrans = [float(i) for i in trans]
     link_db[linkname] = ftrans
 
@@ -166,13 +174,15 @@ def write_link(linkname, trans, rgb, filename_stl, matrix):
     wf.write("  </geometry>\n")
     wf.write("</collision>\n")
     wf.write("<inertial>\n")
-    wf.write('  <mass value="0.01"/>\n')
+    # Compute mass from mesh volume (assuming density of 1 for now)
+    # You can adjust the density multiplier as needed
+    density = 1.0
+    mass = measures['mesh_volume'] * density
+    wf.write(f'  <mass value="{mass:.6f}"/>\n')
 
-    im, com = getmatrix(matrix)
-    wf.write(com)
-    wf.write(
-        im
-    )  # read matrix from matrix.txt file generated from meshlabserver script file
+    im, com = get_inertial_data(ms.current_mesh(), measures)
+    wf.write("  " + com)
+    wf.write("  " + im)
     wf.write("</inertial>\n")
     wf.write("</link>\n")
     wf.write("\n")
@@ -260,14 +270,14 @@ with open(filepath) as fp:
 
                 ms = ml.MeshSet()
                 ms.load_new_mesh(filename_stl)
-                # a 4x4 numpy-like matrix
-                matrix = ms.current_mesh().transform_matrix()
+                # Compute geometric measures for inertial data
+                measures = ms.get_geometric_measures()
 
                 os.system("rm " + filename_stl)
                 os.system("rm " + filename_scad)
 
                 # write urdf with stl file
-                write_link(linkname, trans, rgb, filename_stl, matrix) # filename_stlout
+                write_link(linkname, trans, rgb, filename_stl, measures)
 
                 outline = ""
         p = s
